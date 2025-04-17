@@ -111,23 +111,20 @@ class MoleculeDataset(Dataset):
         source_vocab_max_size=10000,
         target_vocab_max_size=10000,
     ):
-
         self.df = df
         self.transform = transform
 
         # get source and target texts
         self.source_texts = self.df[source_column]
         self.target_texts = self.df[target_column]
-        self.weight = self.df['weight']
-        self.logp = self.df['logp']
-        self.tpsa = self.df['TPSA']
-        # print(self.weight.shape, self.logp.shape, self.tpsa.shape )
+        self.logp = self.df['logP']  # Note capitalization change from logp to logP
+        self.qed = self.df['qed']    # Add QED property
+        self.sas = self.df['SAS']    # Add SAS property
 
         self.source_vocab = Vocabulary(freq_threshold, source_vocab_max_size)
         self.source_vocab.build_vocabulary(self.source_texts.tolist())
         self.target_vocab = Vocabulary(freq_threshold, target_vocab_max_size)
         self.target_vocab.build_vocabulary(self.target_texts.tolist())
-
     def __len__(self):
         return len(self.df)
 
@@ -138,7 +135,7 @@ class MoleculeDataset(Dataset):
         if self.transform is not None:
             source_text = self.transform(source_text)
 
-        # numericalize texts ['<SOS>','cat', 'in', 'a', 'bag','<EOS>'] -> [1,12,2,9,24,2]
+        # numericalize texts
         numerialized_source = [self.source_vocab.stoi["<SOS>"]]
         numerialized_source += self.source_vocab.numericalize(source_text)
         numerialized_source.append(self.source_vocab.stoi["<EOS>"])
@@ -147,12 +144,11 @@ class MoleculeDataset(Dataset):
         numerialized_target += self.source_vocab.numericalize(target_text)
         numerialized_target.append(self.source_vocab.stoi["<EOS>"])
 
-        weight = torch.tensor(self.weight[index]).reshape(1, 1)
         logp = torch.tensor(self.logp[index]).reshape(1, 1)
-        tpsa = torch.tensor(self.tpsa[index]).reshape(1, 1)
-        condition = torch.cat([weight, logp, tpsa], dim=1)
+        qed = torch.tensor(self.qed[index]).reshape(1, 1)
+        sas = torch.tensor(self.sas[index]).reshape(1, 1)
+        condition = torch.cat([logp, qed, sas], dim=1)
 
-        # convert the list to tensor and return
         numerialized_source = torch.tensor(numerialized_source)
         numerialized_target = torch.tensor(numerialized_target)
 
@@ -226,15 +222,15 @@ def get_valid_loader(
 def property_normalize(train_data, valid_data, scale='robust'):
 
     scaler = RobustScaler() if scale == 'robust' else StandardScaler()
-    train_prop = train_data[['weight', 'logp', 'TPSA']]
-    valid_prop = valid_data[['weight', 'logp', 'TPSA']]
+    train_prop = train_data[['logP', 'qed', 'SAS']]  # Changed properties
+    valid_prop = valid_data[['logP', 'qed', 'SAS']]
 
     scaler.fit(train_prop)
     norm_train_prop = scaler.transform(train_prop)
     norm_valid_prop = scaler.transform(valid_prop)
 
-    train_data[['weight', 'logp', 'TPSA']] = norm_train_prop
-    valid_data[['weight', 'logp', 'TPSA']] = norm_valid_prop
+    train_data[['logP', 'qed', 'SAS']] = norm_train_prop
+    valid_data[['logP', 'qed', 'SAS']] = norm_valid_prop
 
     print('smiles property normalization...')
     print(f'train property shape: {norm_train_prop.shape}')
